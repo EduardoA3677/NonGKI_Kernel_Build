@@ -303,8 +303,8 @@ jobs:
 
           elif [ -z "${{ env.GCC_32 }}" ]; then
             # GCC64 + Clang (sin GCC32)
-            make ARCH=arm64 ${{ env.GCC_64 }} ${{ env.DEFCONFIG_NAME }}
-            make -j$(nproc --all) ARCH=arm64 ${{ env.GCC_64 }}
+            make CC="ccache clang" ARCH=arm64 ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }} ${{ env.DEFCONFIG_NAME }}
+            make -j$(nproc --all) CC="ccache clang" ARCH=arm64 ${{ env.CUSTOM_CMDS }} ${{ env.EXTRA_CMDS }} ${{ env.GCC_64 }}
 
           elif [ -z "${{ env.CLANG_SOURCE }}" ]; then
             # Solo GCC (64 y 32)
