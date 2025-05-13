@@ -5,19 +5,15 @@ on:
 env:
   PYTHON_VERSION: "3" # Only 2(Ubuntu 22.04) or 3(Any OS Versions).
   PACK_METHOD: "Anykernel3" # Anykernel3 need SOURCE and BRANCH, MKBOOTIMG needn't it.
-  KERNELSU_METHOD: "shell" # shell, manual and only.
   PATCHES_SOURCE: "JackA1ltman/NonGKI_Kernel_Patches" # [your_name]/[your_patch] -> gooder123/NonGKI_Patcher
   PATCHES_BRANCH: "pixel_kernel" # [your_branch] -> main
-  HOOK_METHOD: "normal" # manual hook method,can choice vfs and normal.
   PROFILE_NAME: "gs201_pixel_a15.env" # your profile name.
-  KERNELSU_SUS_PATCH: "false" # if u need manual susfs patch to kernelsu.
   KPM_ENABLE: "false" # Only use it for SukiSU-Ultra.
   KPM_PATCH_SOURCE: "" # patch exec file source -> raw.githubusercontent.com/Test/Test/patch .
   GENERATE_DTB: "false" # if u kernel need DTB , but cannot auto generate it. (Only Anykernel3).
   GENERATE_CHIP: "qcom" # only supported for qcom and mediatek.
   BUILD_DEBUGGER: "false" # Output build errors.
   BUILD_OTHER_CONFIG: "false" # Merge config files.
-
 
 jobs:
   build:
@@ -50,11 +46,6 @@ jobs:
               DEFCONFIG_SOURCE
               DEFCONFIG_NAME
               DEFCONFIG_ORIGIN_IMAGE
-              KERNELSU_SOURCE
-              KERNELSU_BRANCH
-              KERNELSU_NAME
-              SUSFS_ENABLE
-              SUSFS_FIXED
               AK3_SOURCE
               AK3_BRANCH
               BOOT_SOURCE
@@ -227,85 +218,6 @@ jobs:
             fi
           fi
 
-          # Set SUSFS
-          if [[ "${{ env.SUSFS_ENABLE }}" == true ]]; then
-            if [[ "${{ env.SUSFS_FIXED }}" == true ]]; then
-              if [ -z "${{ env.PATCHES_SOURCE }}" ] || [ -z "${{ env.PATCHES_BRANCH }}" ]; then
-                echo "Please input vaild source and branch!"
-                false
-              elif [[ ${{ env.PATCHES_SOURCE }} == *".git" ]]; then
-                echo "Please do not set a full URL in PATCH_SOURCE!"
-                false
-              else
-                git clone https://github.com/${{ env.PATCHES_SOURCE }}.git -b ${{ env.PATCHES_BRANCH }} NonGKI_Kernel_Patches --depth=1 # It's not necessary.
-              fi
-            fi
-            git clone $SUSFS_SOURCE -b $SUSFS_BRANCH susfs4ksu --depth=1
-            cp susfs4ksu/kernel_patches/fs/* fs/
-            cp susfs4ksu/kernel_patches/include/linux/* include/linux/
-          else
-            echo "Disabled SUSFS !"
-          fi
-
-      - name: Patch Kernel for no-kprobe
-        if: env.NOT_RUN == 'true'
-        run: |
-          cd $GITHUB_WORKSPACE
-          KERNEL=$(echo "${{ env.KERNEL_VERSION }}" | awk -F '.' '{print $1}')
-          PATCHLEVEL=$(echo "${{ env.KERNEL_VERSION }}" | awk -F '.' '{print $2}')
-          if grep -q "CONFIG_KSU" "device_kernel/fs/exec.c"; then
-            echo "Your kernel source code appears to have been manually patched, so this step is skipped."
-          else
-            if [[ ${{ env.HOOK_METHOD }} == "normal" ]]; then
-              if [[ -f "/tmp/Patches/normal_patches.sh" ]]; then
-                  cp /tmp/Patches/normal_patches.sh device_kernel/
-                  cd device_kernel
-                  bash normal_patches.sh
-                  echo "execuated patch successfully."
-                  if [ $KERNEL -lt 5 ] && [ $PATCHLEVEL -lt 14 ]; then
-                      cp /tmp/Patches/extra_patches.sh ./
-                      bash extra_patches.sh
-                      echo "execuated extra patch successfully."
-                  else
-                      echo "your kernel needn't the patch."
-                  fi
-                  if [[ "${{ env.KERNELSU_NAME }}" != "KernelSU-Next" ]]; then
-                      cp /tmp/Patches/backport_patches.sh ./
-                      bash backport_patches.sh
-                      echo "execuated backport patch successfully."
-                  fi
-              else
-                  echo "Cannot found normal_patches.sh in build project , please check u file existed in build project !"
-                  false
-              fi
-            elif [[ ${{ env.HOOK_METHOD }} == "vfs" ]]; then
-              if [[ -f "/tmp/Patches/vfs_hook_patches.sh" ]]; then
-                  cp /tmp/Patches/vfs_hook_patches.sh device_kernel/
-                  cd device_kernel
-                  bash vfs_hook_patches.sh
-                  echo "execuated vfs patch successfully."
-                  if [ $KERNEL -lt 5 ] && [ $PATCHLEVEL -lt 14 ]; then
-                      cp /tmp/Patches/extra_patches.sh ./
-                      bash extra_patches.sh
-                      echo "execuated extra patch successfully."
-                  else
-                      echo "your kernel needn't extra patch."
-                  fi
-                  if [[ "${{ env.KERNELSU_NAME }}" != "KernelSU-Next" ]]; then
-                      cp /tmp/Patches/backport_patches.sh ./
-                      bash backport_patches.sh
-                      echo "execuated backport patch successfully."
-                  fi
-              else
-                  echo "Cannot found vfs_hook_patches.sh in build project , please check u file existed in build project !"
-                  false
-              fi
-            else
-              echo "please input vaild option!"
-              false
-            fi
-          fi
-
       
       - name: Added mkdtboimg to kernel (Experiment)
         if: env.HAVE_NO_DTBO == 'true' && env.HAVE_NO_DTBO_TOOL != 'true'
@@ -354,27 +266,6 @@ jobs:
 
           echo "LXC_ENABLE=lxc" >> $GITHUB_ENV
 
-      - name: Patch Kernel of SUSFS
-        if: env.SUSFS_ENABLE == 'true'
-        run: |
-          cd $GITHUB_WORKSPACE/device_kernel/
-          cp susfs4ksu/kernel_patches/50_add_susfs_in_gki-android14-${{ env.KERNEL_VERSION }}.patch ./
-
-          patch -p1 < 50_add_susfs_in_gki-android14-${{ env.KERNEL_VERSION }}.patch || true
-
-          if [[ "${{ env.KERNELSU_NAME }}"  == "KernelSU-Next" ]]; then
-            if [[ "${{ env.KERNELSU_SOURCE }}" =~ ".sh" && "${{ env.KERNELSU_BRANCH }}" =~ "susfs" ]]; then
-                echo "KernelSU-Next SuSFS Branch detected!"
-            elif [[ "${{ env.KERNELSU_SOURCE }}" =~ ".sh" ]]; then
-                git clone ${{ env.KERNELSU_SOURCE }} -b ${{ env.KERNELSU_BRANCH }}-susfs susfs_fixed
-                rsync -av --exclude='.git' susfs_fixed/kernel/ KernelSU-Next/kernel/
-            fi
-          elif [[ "${{ env.KERNELSU_SUS_PATCH }}" == "true" ]]; then
-            cp susfs4ksu/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch ./${{ env.KERNELSU_NAME }}
-            cd ${{ env.KERNELSU_NAME }}
-            patch -p1 < 10_enable_susfs_for_ksu.patch || true
-          fi
-
       - name: Patch Debugger
         if: env.BUILD_DEBUGGER == 'true'
         run: |
@@ -390,14 +281,6 @@ jobs:
             done
             false
           fi
-
-      - name: Fixed Kernel Patch
-        if: env.SUSFS_ENABLE == 'true' && env.SUSFS_FIXED == 'true'
-        run: |
-          cd $GITHUB_WORKSPACE/device_kernel/
-          cp NonGKI_Kernel_Patches/pixel_9_series_official/sys_fixed.patch ./
-
-          patch -p1 < sys_fixed.patch || true
 
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
