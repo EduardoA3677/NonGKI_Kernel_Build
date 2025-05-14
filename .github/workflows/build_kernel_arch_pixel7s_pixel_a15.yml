@@ -292,8 +292,6 @@ jobs:
 
       - name: Build Kernel
         run: |
-          export PATH=$GITHUB_WORKSPACE/clang-custom/bin:$PATH
-          ls -l $GITHUB_WORKSPACE/clang-custom/
           cd $GITHUB_WORKSPACE/device_kernel/
 
           if [ -z "${{ env.GCC_32 }}" ] && [ -z "${{ env.GCC_64 }}" ]; then
